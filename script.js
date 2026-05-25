@@ -8,7 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // 2. Fetch the data from the database
 async function fetchData() {
     const { data, error } = await supabase
-        .from('test_data')
+        .from('test')
         .select('*');
 
     const outputElement = document.getElementById('output');
