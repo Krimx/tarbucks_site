@@ -1,13 +1,17 @@
-// 1. Initialize Supabase (Replace these with your actual keys from Step 1)
+// 1. Initialize Supabase
 const supabaseUrl = 'https://jjsuczcuipdojsbfutaq.supabase.co';
 const supabaseKey = 'sb_publishable_C42OxgLWxLUxaOmn9l6_kg_SLLnBzPv';
 
+// We get createClient from the global supabase object
 const { createClient } = window.supabase;
-const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Renamed to 'supabaseClient' so it doesn't collide with the global 'supabase' variable!
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 // 2. Fetch the data from the database
 async function fetchData() {
-    const { data, error } = await supabase
+    // Make sure to use the new variable name here too
+    const { data, error } = await supabaseClient
         .from('test')
         .select('*');
 
