@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tarbucks Site</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <section class="header">
+        
+    </section>
+    <section class="body">
+
+    </section>
+    
+    <!--                              remember what this code looks like, youll need it
+    <div id="testing-container">
+        <h2>Vanilla Syrup</h2>
+        
+        <p>Amount Needed: <span id="display-triangle_run-1">Loading...</span></p>
+
+        <button onclick="changeAmount('triangle_run', 1, -1)">- Decrease</button>
+        <button onclick="changeAmount('triangle_run', 1, 1)">+ Increase</button>
+    </div>
+    -->
+
+    <script src="script.js">
+        const tableName = 'triangle_run';
+        const allData = await fetchAllFromTable(tableName); 
+        
+        console.log("Here is the data Supabase sent:", allData); 
+        
+        if (allData) {
+            // Loop through every single row Supabase gave us
+            allData.forEach(row => {
+                // Reconstruct the exact ID we used in the HTML
+                const spanId = `display-${tableName}-${row.id}`;
+                const displaySpan = document.getElementById(spanId);
+                
+                // If we find that span on the page, update it with the database number!
+                if (displaySpan) {
+                    displaySpan.innerText = row.amount_needed;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

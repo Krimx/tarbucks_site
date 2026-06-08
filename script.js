@@ -50,3 +50,37 @@ function parseToParallelArrays(databaseRows, col1Name, col2Name) {
 
     return { array1, array2 };
 }
+
+// Function specifically for your + and - HTML buttons
+async function changeAmount(tableName, rowId, changeValue) {
+    // 1. Find the text on the screen and give instant visual feedback
+    const displaySpan = document.getElementById(`display-${tableName}-${rowId}`);
+    displaySpan.innerText = "..."; 
+
+    // 2. Ask Supabase for the current amount for this specific row
+    const { data, error } = await supabaseClient
+        .from(tableName)
+        .select('amount_needed')
+        .eq('id', rowId)
+        .single(); // .single() tells Supabase we only want one row back, not an array
+
+    if (error) {
+        console.error("Could not get current amount:", error);
+        displaySpan.innerText = "Error";
+        return;
+    }
+
+    // 3. Do the math
+    let newAmount = data.amount_needed + changeValue;
+    
+    // Prevent the amount from dropping below zero
+    if (newAmount < 0) {
+        newAmount = 0;
+    }
+
+    // 4. Send the new total to the database using your universal helper function!
+    await updateRow(tableName, rowId, { amount_needed: newAmount });
+
+    // 5. Update the text on the screen to show the new saved number
+    displaySpan.innerText = newAmount;
+}
