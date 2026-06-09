@@ -1,5 +1,15 @@
+:root {
+    color-scheme: light dark;
+    --header-color-dark: #001a00;
+    --header-color-light: #d2ffdd;
+}
+
 .header {
     width: 100%;
-    height: 3rem;
-    background-color: red;
+    background-color: light-dark(var(--header-color-light), var(--header-color-dark));
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
 }

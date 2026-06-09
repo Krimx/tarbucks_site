@@ -1,17 +1,23 @@
-// --- INITIALIZATION ---
+// =========================================================================
+// 1. INITIALIZATION & CONFIGURATION
+// =========================================================================
 const supabaseUrl = 'https://jjsuczcuipdojsbfutaq.supabase.co';
-const supabaseKey = 'sb_publishable_C42OxgLWxLUxaOmn9l6_kg_SLLnBzPv'; // Your publishable key
+const supabaseKey = 'sb_publishable_C42OxgLWxLUxaOmn9l6_kg_SLLnBzPv'; 
 const { createClient } = window.supabase;
-const supabaseClient = createClient(supabaseUrl, supabaseKey); // Using supabaseClient to avoid naming collisions!
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-// --- HELPER FUNCTIONS ---
+const TABLE_NAME = 'triangle_run';
 
-// Function 1: Fetch all rows from ANY table
+// =========================================================================
+// 2. UNIVERSAL DATABASE HELPERS (CRUD)
+// =========================================================================
+
+// FETCH ALL ROWS
 async function fetchAllFromTable(tableName) {
     const { data, error } = await supabaseClient
         .from(tableName)
         .select('*')
-        .order('id', { ascending: true }); // Keeps arrays ordered cleanly
+        .order('id', { ascending: true });
 
     if (error) {
         console.error(`Error fetching from ${tableName}:`, error.message);
@@ -20,8 +26,7 @@ async function fetchAllFromTable(tableName) {
     return data;
 }
 
-// Function 2: Update ANY column in ANY table
-// 'updateObject' looks like: { amount_needed: 5 } OR { is_ordered: true }
+// UPDATE A ROW
 async function updateRow(tableName, rowId, updateObject) {
     const { error } = await supabaseClient
         .from(tableName)
@@ -35,52 +40,230 @@ async function updateRow(tableName, rowId, updateObject) {
     return true;
 }
 
-// Function 3: Parse ANY two columns into parallel arrays
+// Reset every single item's amount_needed to 0
+async function clearAllAmounts() {
+    const safetyConfirmation = confirm("Are you sure you want to reset ALL inventory amounts back to 0?");
+    if (!safetyConfirmation) return; 
+
+    const { error } = await supabaseClient
+        .from(TABLE_NAME)
+        .update({ amount_needed: 0 })
+        .gt('id', 0); 
+
+    if (error) {
+        console.error("Error clearing all amounts:", error.message);
+        alert("Something went wrong while resetting the database.");
+        return;
+    }
+
+    console.log("All amounts successfully reset to 0!");
+    loadDataForTriangleRun();
+}
+
+// INSERT / ADD A NEW ROW
+async function addRow(tableName, newRowData) {
+    const { error } = await supabaseClient
+        .from(tableName)
+        .insert([newRowData]);
+
+    if (error) {
+        console.error(`Error adding row to ${tableName}:`, error.message);
+        return false;
+    }
+    
+    loadDataForTriangleRun(); 
+    return true;
+}
+
+// DELETE A ROW
+async function deleteRow(tableName, rowId) {
+    const { error } = await supabaseClient
+        .from(tableName)
+        .delete()
+        .eq('id', rowId);
+
+    if (error) {
+        console.error(`Error deleting row ${rowId} from ${tableName}:`, error.message);
+        return false;
+    }
+    
+    loadDataForTriangleRun(); 
+    return true;
+}
+
+// PARSE COLUMNS
 function parseToParallelArrays(databaseRows, col1Name, col2Name) {
     const array1 = [];
     const array2 = [];
-
     if (databaseRows) {
         databaseRows.forEach(row => {
-            // Using bracket notation row[colName] allows us to use dynamic column names
             array1.push(row[col1Name]);
             array2.push(row[col2Name]);
         });
     }
-
     return { array1, array2 };
 }
 
-// Function specifically for your + and - HTML buttons
-async function changeAmount(tableName, rowId, changeValue) {
-    // 1. Find the text on the screen and give instant visual feedback
-    const displaySpan = document.getElementById(`display-${tableName}-${rowId}`);
-    displaySpan.innerText = "..."; 
+// =========================================================================
+// 3. APPLICATION UI LOGIC
+// =========================================================================
 
-    // 2. Ask Supabase for the current amount for this specific row
+// Handle the + and - buttons
+async function changeAmount(tableName, rowId, changeValue) {
+    const displaySpan = document.getElementById(`display-${tableName}-${rowId}`);
+    if (displaySpan) displaySpan.innerText = "..."; 
+
     const { data, error } = await supabaseClient
         .from(tableName)
         .select('amount_needed')
         .eq('id', rowId)
-        .single(); // .single() tells Supabase we only want one row back, not an array
+        .single();
 
     if (error) {
         console.error("Could not get current amount:", error);
-        displaySpan.innerText = "Error";
+        if (displaySpan) displaySpan.innerText = "Error";
         return;
     }
 
-    // 3. Do the math
     let newAmount = data.amount_needed + changeValue;
-    
-    // Prevent the amount from dropping below zero
-    if (newAmount < 0) {
-        newAmount = 0;
+    if (newAmount < 0) newAmount = 0;
+
+    await updateRow(tableName, rowId, { amount_needed: newAmount });
+    if (displaySpan) displaySpan.innerText = newAmount;
+}
+
+let isFetchingMode = false;
+let gottenItems = new Set(); // This acts as our temporary "shopping cart" memory!
+
+// Toggle fetching mode on and off
+function toggleFetchingMode() {
+    isFetchingMode = !isFetchingMode;
+    // If they exit fetching mode early, clear the memory so it doesn't accidentally save later
+    if (!isFetchingMode) {
+        gottenItems.clear();
+    }
+    loadDataForTriangleRun(); 
+}
+
+// Function to temporarily mark an item as gotten on the screen (no database update yet)
+function toggleGottenState(rowId) {
+    const card = document.getElementById(`item-${rowId}`);
+    const btn = document.getElementById(`gotten-btn-${rowId}`);
+
+    if (gottenItems.has(rowId)) {
+        // Undo the gotten state
+        gottenItems.delete(rowId);
+        card.style.opacity = "1"; // Return to normal visibility
+        btn.innerText = "✅ Mark as Gotten";
+    } else {
+        // Mark as gotten
+        gottenItems.add(rowId);
+        card.style.opacity = "0.5"; // Dim the card to show it's done!
+        btn.innerText = "↩️ Undo";
+    }
+}
+
+// Finalize the run and push all "Gotten" items to the database
+async function completeTriangleRun() {
+    if (gottenItems.size === 0) {
+        alert("You haven't marked any items as gotten yet!");
+        return;
     }
 
-    // 4. Send the new total to the database using your universal helper function!
-    await updateRow(tableName, rowId, { amount_needed: newAmount });
+    const confirmRun = confirm(`Ready to complete the run? This will set ${gottenItems.size} fetched item(s) back to 0.`);
+    if (!confirmRun) return;
 
-    // 5. Update the text on the screen to show the new saved number
-    displaySpan.innerText = newAmount;
+    // Convert our Set memory into a standard Array so Supabase can read it
+    const idsToUpdate = Array.from(gottenItems);
+
+    // Tell Supabase: Set amount_needed to 0 for ANY row whose ID is IN our idsToUpdate array
+    const { error } = await supabaseClient
+        .from(TABLE_NAME)
+        .update({ amount_needed: 0 })
+        .in('id', idsToUpdate);
+
+    if (error) {
+        console.error("Error completing run:", error.message);
+        alert("Something went wrong while updating the database.");
+        return;
+    }
+
+    console.log("Triangle run completed successfully!");
+    
+    // Clean up and reset everything
+    gottenItems.clear();
+    isFetchingMode = false; 
+    loadDataForTriangleRun(); 
 }
+
+// =========================================================================
+// 4. SEARCH BAR LOGIC
+// =========================================================================
+
+function setupSearchBar() {
+    const searchInput = document.getElementById('item_search_input');
+    const suggestionsList = document.getElementById('search_suggestions');
+
+    // Close suggestions if the user clicks anywhere outside the search box
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+            suggestionsList.innerHTML = '';
+        }
+    });
+
+    // Listen to every keystroke
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        suggestionsList.innerHTML = ''; // Wipe previous suggestions
+
+        if (query === '') return;
+
+        // Find all item cards CURRENTLY visible on the screen
+        const itemCards = document.querySelectorAll('.item_card');
+        let matchCount = 0;
+
+        itemCards.forEach(card => {
+            const itemNameElement = card.querySelector('.item_name');
+            if (!itemNameElement) return;
+
+            const itemName = itemNameElement.innerText;
+            
+            // If the item name contains the letters typed (e.g. "van" -> "Vanilla")
+            if (itemName.toLowerCase().includes(query)) {
+                
+                // Create a dropdown option
+                const li = document.createElement('li');
+                li.className = 'suggestion_item';
+                li.innerText = itemName;
+                
+                // When clicked, jump to the item!
+                li.addEventListener('click', () => {
+                    // Smoothly scroll the screen so the item is in the center
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Add a temporary highlight flash so the user knows which one to look at
+                    card.classList.add('is_highlighted');
+                    setTimeout(() => card.classList.remove('is_highlighted'), 2500);
+
+                    // Clear the search bar out
+                    searchInput.value = '';
+                    suggestionsList.innerHTML = '';
+                });
+                
+                suggestionsList.appendChild(li);
+                matchCount++;
+            }
+        });
+
+        // Show a "No items found" message if nothing matches
+        if (matchCount === 0) {
+            const li = document.createElement('li');
+            li.className = 'suggestion_item no_results';
+            li.innerText = 'No items found';
+            suggestionsList.appendChild(li);
+        }
+    });
+}
+
+// Start up the search bar once the page loads
+document.addEventListener('DOMContentLoaded', setupSearchBar);

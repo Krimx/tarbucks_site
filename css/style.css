@@ -2,16 +2,88 @@
 @import url('./buttons.css');
 
 :root {
-
+    color-scheme: light dark;
+    --bg-color-dark: #033907;
+    --bg-color-light: rgb(98, 167, 104);
 }
 
 html, body {
     max-width: 100%;
     overflow-x: hidden;
+    background-color: light-dark(var(--bg-color-light), var(--bg-color-dark));
 }
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+/* --- SEARCH BAR --- */
+.search_container {
+    position: relative;
+    max-width: 500px;
+    margin: 1rem 0;
+}
+
+.search_input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    /* Uses your dynamic light/dark colors! */
+    border: 1px solid light-dark(#cccccc, #2d2d34);
+    background-color: light-dark(#ffffff, #1e1e22);
+    color: light-dark(#111111, #f5f5f5);
+}
+
+.search_suggestions_list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    border-radius: 8px;
+    list-style: none;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1000; /* Forces the dropdown to float over all other content */
+    background-color: light-dark(#ffffff, #1e1e22);
+    border: 1px solid light-dark(#cccccc, #2d2d34);
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Hide the list entirely if it's empty */
+.search_suggestions_list:empty {
+    display: none;
+}
+
+.suggestion_item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid light-dark(#eeeeee, #2d2d34);
+}
+
+.suggestion_item:hover {
+    background-color: light-dark(#f0f0f0, #2a2a2a);
+}
+
+.suggestion_item:last-child {
+    border-bottom: none;
+}
+
+.no_results {
+    color: light-dark(#666666, #aaaaaa);
+    cursor: default;
+}
+
+.no_results:hover {
+    background-color: transparent;
+}
+
+/* Flash highlight class for when you click a search result */
+.is_highlighted {
+    border: 2px solid light-dark(rgb(98, 167, 104), #62a768) !important;
+    box-shadow: 0px 0px 15px light-dark(rgba(98, 167, 104, 0.5), rgba(98, 167, 104, 0.3)) !important;
+    transition: all 0.3s ease-in-out;
 }

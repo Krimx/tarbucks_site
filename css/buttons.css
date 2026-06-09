@@ -1,0 +1,78 @@
+:root {
+    --enter-fetching-mode: #2e901a;
+    --exit-fetching-mode: #951d1d;
+}
+
+/* --- ITEM CARD LAYOUT --- */
+.item_card {
+    display: flex;
+    justify-content: space-between; /* Pushes info to the left, controls to the right */
+    align-items: center; /* Centers them vertically */
+    
+    /* Using your new dynamic colors! Add --bg-card to your :root if you haven't yet */
+    background-color: light-dark(#ffffff, #121214); 
+    border: 1px solid light-dark(#cccccc, #2d2d2d);
+    
+    padding: 1rem 1.5rem;
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+}
+
+/* Left Side: Text Box */
+.item_info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem; /* Tiny space between title and amount */
+}
+
+.item_name {
+    margin: 0;
+    font-size: 1.25rem; 
+    font-weight: bold;
+}
+
+.item_amount {
+    margin: 0;
+    font-size: 1rem; /* Exactly 80% of 1.25rem! */
+    opacity: 0.8; /* Makes the text look slightly softer to create visual hierarchy */
+}
+
+/* Right Side: Button Container */
+.item_controls {
+    display: flex;
+    gap: 10px;
+    
+    /* This min-width ensures the right side of the card ALWAYS takes up the same physical space */
+    /* Whether it holds 2 small buttons or 1 large "Gotten" button */
+    min-width: 150px; 
+}
+
+.card_btn {
+    flex: 1; /* Makes the Dec and Inc buttons exactly equal in width */
+    padding: 10px;
+    font-size: 1rem;
+    cursor: pointer;
+    border-radius: 6px;
+    border: none;
+    font-weight: bold;
+    background-color: light-dark(#e0e0e0, #2a2a2a);
+    color: inherit;
+}
+
+/* The single button will stretch across the whole flex container automatically */
+.gotten_btn {
+    width: 100%; 
+    background-color: light-dark(rgb(98, 167, 104), #033907);
+    color: white;
+}
+
+.fetching_mode_button {
+    font-size: 2rem;
+    padding: .5rem;
+}
+.fetching_mode_button.is_fetching{
+    background-color: var(--exit-fetching-mode);
+}
+.fetching_mode_button.not_fetching{
+    background-color: var(--enter-fetching-mode);
+}
