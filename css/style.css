@@ -13,6 +13,11 @@ html, body {
     background-color: light-dark(var(--bg-color-light), var(--bg-color-dark));
 }
 
+button {
+    /* Disables double-tap to zoom and makes buttons tap instantly! */
+    touch-action: manipulation; 
+}
+
 * {
     margin: 0;
     padding: 0;
