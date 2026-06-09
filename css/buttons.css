@@ -44,10 +44,10 @@
     
     /* This min-width ensures the right side of the card ALWAYS takes up the same physical space */
     /* Whether it holds 2 small buttons or 1 large "Gotten" button */
-    min-width: 150px; 
+    min-width: 150px;
 }
 
-.card_btn {
+.card_button {
     flex: 1; /* Makes the Dec and Inc buttons exactly equal in width */
     padding: 10px;
     font-size: 1rem;
@@ -57,10 +57,11 @@
     font-weight: bold;
     background-color: light-dark(#e0e0e0, #2a2a2a);
     color: inherit;
+    height: 100%;
 }
 
 /* The single button will stretch across the whole flex container automatically */
-.gotten_btn {
+.gotten_button {
     width: 100%; 
     background-color: light-dark(rgb(98, 167, 104), #033907);
     color: white;

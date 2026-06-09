@@ -72,7 +72,7 @@ async function loadDataForTriangleRun() {
         if (isFetchingMode) {
             // Check if this item is currently in our memory
             const isGotten = gottenItems.has(item.id);
-            const buttonText = isGotten ? "↩️ Undo" : "✅ Mark as Gotten";
+            const buttonText = isGotten ? "Undo" : "Mark as Gotten";
 
             // A single button taking up the whole space
             cardControlsHTML = `
@@ -81,8 +81,8 @@ async function loadDataForTriangleRun() {
         } else {
             // Standard management mode buttons 
             cardControlsHTML = `
-                <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, -1)">- Decrease</button>
-                <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, 1)">+ Increase</button>
+                <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, -1)">Decrease</button>
+                <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, 1)">Increase</button>
             `;
         }
 
