@@ -8,6 +8,14 @@ const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 const TABLE_NAME = 'triangle_run';
 
+// Global State Variables for Application Modes
+let isFetchingMode = false;
+let gottenItems = new Set(); // Acts as temporary fetching memory
+
+let isEditingMode = false;
+let stagedItems = [];        // Local copy of items used to queue changes before committing
+let nextTempId = -1;         // Tracker for giving unique temporary IDs to new client items
+
 // =========================================================================
 // 2. UNIVERSAL DATABASE HELPERS (CRUD)
 // =========================================================================
@@ -105,11 +113,10 @@ function parseToParallelArrays(databaseRows, col1Name, col2Name) {
 }
 
 // =========================================================================
-// 3. APPLICATION UI LOGIC
+// 3. APPLICATION UI LOGIC & MODES
 // =========================================================================
 
 function isDarkMode() {
-    // Returns true if the device is in Dark Mode, false if in Light Mode
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
@@ -137,33 +144,31 @@ async function changeAmount(tableName, rowId, changeValue) {
     if (displaySpan) displaySpan.innerText = newAmount;
 }
 
-let isFetchingMode = false;
-let gottenItems = new Set(); // This acts as our temporary "shopping cart" memory!
-
 // Toggle fetching mode on and off
 function toggleFetchingMode() {
+    if (isEditingMode) {
+        alert("Please exit Editing Mode before entering Fetching Mode.");
+        return;
+    }
     isFetchingMode = !isFetchingMode;
-    // If they exit fetching mode early, clear the memory so it doesn't accidentally save later
     if (!isFetchingMode) {
         gottenItems.clear();
     }
     loadDataForTriangleRun(); 
 }
 
-// Function to temporarily mark an item as gotten on the screen (no database update yet)
+// Function to temporarily mark an item as gotten on the screen
 function toggleGottenState(rowId) {
     const card = document.getElementById(`item-${rowId}`);
     const btn = document.getElementById(`gotten-btn-${rowId}`);
 
     if (gottenItems.has(rowId)) {
-        // Undo the gotten state
         gottenItems.delete(rowId);
-        card.style.opacity = "1"; // Return to normal visibility
+        card.style.opacity = "1"; 
         btn.innerText = "✅ Mark as Gotten";
     } else {
-        // Mark as gotten
         gottenItems.add(rowId);
-        card.style.opacity = "0.5"; // Dim the card to show it's done!
+        card.style.opacity = "0.5"; 
         btn.innerText = "↩️ Undo";
     }
 }
@@ -178,10 +183,8 @@ async function completeTriangleRun() {
     const confirmRun = confirm(`Ready to complete the run? This will set ${gottenItems.size} fetched item(s) back to 0.`);
     if (!confirmRun) return;
 
-    // Convert our Set memory into a standard Array so Supabase can read it
     const idsToUpdate = Array.from(gottenItems);
 
-    // Tell Supabase: Set amount_needed to 0 for ANY row whose ID is IN our idsToUpdate array
     const { error } = await supabaseClient
         .from(TABLE_NAME)
         .update({ amount_needed: 0 })
@@ -194,11 +197,184 @@ async function completeTriangleRun() {
     }
 
     console.log("Triangle run completed successfully!");
-    
-    // Clean up and reset everything
     gottenItems.clear();
     isFetchingMode = false; 
     loadDataForTriangleRun(); 
+}
+
+// =========================================================================
+// CLIENT-SIDE EDITING MODE MANAGEMENT
+// =========================================================================
+
+function toggleEditingMode() {
+    if (isFetchingMode) {
+        alert("Please exit Fetching Mode before entering Editing Mode.");
+        return;
+    }
+    isEditingMode = !isEditingMode;
+    if (!isEditingMode) {
+        // Clear out any uncommitted client-side alterations
+        stagedItems = [];
+        nextTempId = -1;
+    }
+    loadDataForTriangleRun();
+}
+
+// Displays a clean, blurred modal overlay menu for naming/categories
+function showAddItemModal() {
+    let modal = document.getElementById('edit-mode-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'edit-mode-modal';
+        modal.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(5px);";
+        document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div style="background: light-dark(#ffffff, #1e1e22); padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid #ccc; display: flex; flex-direction: column; gap: 15px; color: light-dark(#111111, #f5f5f5);">
+            <h3 style="margin-bottom: 5px;">✨ Add New Item</h3>
+            <label style="font-size: 0.9rem; font-weight: bold;">Item Name:</label>
+            <input type="text" id="modal-item-name" placeholder="e.g., White Mocha" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; width: 100%; background: inherit; color: inherit;">
+            
+            <label style="font-size: 0.9rem; font-weight: bold;">Category (Type):</label>
+            <input type="text" id="modal-item-type" placeholder="e.g., sauce" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; width: 100%; background: inherit; color: inherit;">
+            
+            <div style="display: flex; gap: 10px; margin-top: 10px; height: 45px;">
+                <button onclick="closeEditModal()" style="flex: 1; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; background: #951d1d; color: white;">Cancel</button>
+                <button onclick="saveStagedItem(null)" style="flex: 1; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; background: #2e901a; color: white;">Stage Add</button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+}
+
+function showEditItemModal(rowId) {
+    const item = stagedItems.find(i => i.id === rowId);
+    if (!item) return;
+
+    let modal = document.getElementById('edit-mode-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'edit-mode-modal';
+        modal.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(5px);";
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div style="background: light-dark(#ffffff, #1e1e22); padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid #ccc; display: flex; flex-direction: column; gap: 15px; color: light-dark(#111111, #f5f5f5);">
+            <h3 style="margin-bottom: 5px;">✏️ Edit Item</h3>
+            <label style="font-size: 0.9rem; font-weight: bold;">Item Name:</label>
+            <input type="text" id="modal-item-name" value="${item.item_name}" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; width: 100%; background: inherit; color: inherit;">
+            
+            <label style="font-size: 0.9rem; font-weight: bold;">Category (Type):</label>
+            <input type="text" id="modal-item-type" value="${item.type || ''}" style="padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; width: 100%; background: inherit; color: inherit;">
+            
+            <div style="display: flex; gap: 10px; margin-top: 10px; height: 45px;">
+                <button onclick="closeEditModal()" style="flex: 1; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; background: #951d1d; color: white;">Cancel</button>
+                <button onclick="saveStagedItem(${rowId})" style="flex: 1; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; background: #2e901a; color: white;">Stage Changes</button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+}
+
+function closeEditModal() {
+    const modal = document.getElementById('edit-mode-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function saveStagedItem(rowId = null) {
+    const nameInput = document.getElementById('modal-item-name');
+    const typeInput = document.getElementById('modal-item-type');
+    if (!nameInput || !typeInput) return;
+
+    let name = nameInput.value.trim();
+    let type = typeInput.value.toLowerCase().trim();
+
+    if (!name || !type) {
+        alert("Both Item Name and Category fields are required.");
+        return;
+    }
+
+    // Force strict title case for names
+    name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+    if (rowId === null) {
+        // Build an uncommitted additions object
+        const newItem = {
+            id: nextTempId--,
+            item_name: name,
+            type: type,
+            amount_needed: 0,
+            is_new: true
+        };
+        stagedItems.push(newItem);
+    } else {
+        // Mark existing row for modifications locally
+        const item = stagedItems.find(i => i.id === rowId);
+        if (item) {
+            item.item_name = name;
+            item.type = type;
+            item.is_edited = true;
+        }
+    }
+
+    closeEditModal();
+    loadDataForTriangleRun();
+}
+
+function stageDeleteItem(rowId) {
+    const item = stagedItems.find(i => i.id === rowId);
+    if (!item) return;
+
+    const confirmStaging = confirm(`Staging delete: Are you sure you want to delete "${item.item_name}"? This won't hit the DB until you press Commit.`);
+    if (!confirmStaging) return;
+
+    if (item.is_new) {
+        stagedItems = stagedItems.filter(i => i.id !== rowId);
+    } else {
+        item.is_deleted = true;
+    }
+    loadDataForTriangleRun();
+}
+
+// Performs a secure linear batch transaction to Supabase
+async function commitEditingChanges() {
+    const toDelete = stagedItems.filter(item => item.is_deleted && !item.is_new);
+    const toAdd = stagedItems.filter(item => item.is_new && !item.is_deleted);
+    const toUpdate = stagedItems.filter(item => item.is_edited && !item.is_deleted && !item.is_new);
+
+    const netChangesCount = toDelete.length + toAdd.length + toUpdate.length;
+    if (netChangesCount === 0) {
+        alert("No staged adjustments found to commit.");
+        return;
+    }
+
+    const verify = confirm(`Commit changes to live database?\n\n- Additions: ${toAdd.length}\n- Edits: ${toUpdate.length}\n- Deletions: ${toDelete.length}\n\nThis will permanently execute changes on your Supabase table.`);
+    if (!verify) return;
+
+    console.log("⏳ Flushing operations into Supabase transaction layer...");
+
+    // 1. Process Deletions
+    for (const item of toDelete) {
+        await supabaseClient.from(TABLE_NAME).delete().eq('id', item.id);
+    }
+
+    // 2. Process Additions
+    for (const item of toAdd) {
+        await supabaseClient.from(TABLE_NAME).insert([{ item_name: item.item_name, type: item.type, amount_needed: 0 }]);
+    }
+
+    // 3. Process Edits/Updates
+    for (const item of toUpdate) {
+        await supabaseClient.from(TABLE_NAME).update({ item_name: item.item_name, type: item.type }).eq('id', item.id);
+    }
+
+    alert("🎉 Live database sync complete!");
+    isEditingMode = false;
+    stagedItems = [];
+    nextTempId = -1;
+    loadDataForTriangleRun();
 }
 
 // =========================================================================
@@ -209,21 +385,18 @@ function setupSearchBar() {
     const searchInput = document.getElementById('item_search_input');
     const suggestionsList = document.getElementById('search_suggestions');
 
-    // Close suggestions if the user clicks anywhere outside the search box
     document.addEventListener('click', (e) => {
         if (!searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
             suggestionsList.innerHTML = '';
         }
     });
 
-    // Listen to every keystroke
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase().trim();
-        suggestionsList.innerHTML = ''; // Wipe previous suggestions
+        suggestionsList.innerHTML = ''; 
 
         if (query === '') return;
 
-        // Find all item cards CURRENTLY visible on the screen
         const itemCards = document.querySelectorAll('.item_card');
         let matchCount = 0;
 
@@ -232,25 +405,15 @@ function setupSearchBar() {
             if (!itemNameElement) return;
 
             const itemName = itemNameElement.innerText;
-            
-            // If the item name contains the letters typed (e.g. "van" -> "Vanilla")
             if (itemName.toLowerCase().includes(query)) {
-                
-                // Create a dropdown option
                 const li = document.createElement('li');
                 li.className = 'suggestion_item';
                 li.innerText = itemName;
                 
-                // When clicked, jump to the item!
                 li.addEventListener('click', () => {
-                    // Smoothly scroll the screen so the item is in the center
                     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
-                    // Add a temporary highlight flash so the user knows which one to look at
                     card.classList.add('is_highlighted');
                     setTimeout(() => card.classList.remove('is_highlighted'), 2500);
-
-                    // Clear the search bar out
                     searchInput.value = '';
                     suggestionsList.innerHTML = '';
                 });
@@ -260,7 +423,6 @@ function setupSearchBar() {
             }
         });
 
-        // Show a "No items found" message if nothing matches
         if (matchCount === 0) {
             const li = document.createElement('li');
             li.className = 'suggestion_item no_results';
@@ -268,59 +430,28 @@ function setupSearchBar() {
             suggestionsList.appendChild(li);
         }
     });
-
-    // if (isDarkMode()) {
-    //     const bgImage = document.getElementById("bgImage");
-    //     bgImage.src = "./recs/logo-dark.png"
-    // }
 }
 
-// Start up the search bar once the page loads
 document.addEventListener('DOMContentLoaded', setupSearchBar);
 
 // =========================================================================
 // 5. DEVELOPER CONSOLE TOOLS
 // =========================================================================
 
-// Can handle single items: addItem("Oat Milk", "Dairy")
-// OR bulk lists: addItem([{name: "Oat Milk", type: "Dairy"}, {name: "Splenda", type: "Sweeteners"}])
 window.addItem = async function(input, optionalType) {
-    // Case 1: User passed a bulk array of items
     if (Array.isArray(input)) {
         console.log(`🚀 Bulk Mode: Processing ${input.length} items sequentially...`);
-        
         for (const item of input) {
-            if (!item.name || !item.type) {
-                console.warn("⚠️ Skipping invalid bulk item object. Must have {name, type}");
-                continue;
-            }
-            // Wait for each item to finish completely before moving to the next
+            if (!item.name || !item.type) continue;
             await executeSingleAdd(item.name, item.type);
         }
-        
-        console.log("🏁 All bulk items processed!");
         return;
     }
-
-    // Case 2: User passed a single item string
     await executeSingleAdd(input, optionalType);
 };
 
-// Internal isolated logic to handle database pushes cleanly
 async function executeSingleAdd(name, type) {
-    if (!name || !type) {
-        console.error("❌ Missing info! Usage: addItem('Name', 'Category')");
-        return false;
-    }
-
-    console.log(`⏳ Sending '${name}' to database...`);
+    if (!name || !type) return false;
     const success = await addRow(TABLE_NAME, { item_name: name, type: type });
-
-    if (success) {
-        console.log(`✅ Success! '${name}' added.`);
-        return true;
-    } else {
-        console.error(`❌ Failed to add '${name}'`);
-        return false;
-    }
+    return success;
 }

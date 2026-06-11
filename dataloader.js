@@ -34,26 +34,51 @@ function toTitleCase(str) {
 
 // Load database rows, sort alphabetically/by category list, and dynamically build categories/cards
 async function loadDataForTriangleRun() {
-    const allData = await fetchAllFromTable(TABLE_NAME); 
+    let allData;
+    
+    // Intercept data requests: Render staging environment layout if active
+    if (isEditingMode) {
+        allData = stagedItems.filter(item => !item.is_deleted);
+    } else {
+        allData = await fetchAllFromTable(TABLE_NAME); 
+        if (!allData) return;
+        // Seed our staging system array whenever fresh pulls hit standard mode
+        stagedItems = JSON.parse(JSON.stringify(allData));
+    }
     
     const mainContentArea = document.getElementById('main-content-area');
     if (!mainContentArea) return;
 
-    // 1. Build the Top Controls conditionally based on mode
-    let topControlsHTML = `
-        <div class="top_controls" style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 10px; align-items: center">
-            <button class="clear_all_button" onclick="clearAllAmounts()">🔄 Clear All Amounts</button>
-            <button class="fetching_mode_button ${isFetchingMode ? 'is_fetching' : 'not_fetching'}" id="fetching-mode-button" onclick="toggleFetchingMode()">
-                ${isFetchingMode ? 'Cancel Fetching Mode' : 'Enter Fetching Mode'}
-            </button>
-    `;
+    // 1. Build the Top Controls conditionally based on active application mode
+    let topControlsHTML = `<div class="top_controls" style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%;">`;
 
-    // Add the "Complete Run" button ONLY if we are in fetching mode
-    const fetchingButton = document.getElementById("fetching-mode-button");
-    if (isFetchingMode) {
+    if (isEditingMode) {
+        // Layout buttons specifically mapped to client-side configuration tweaks
         topControlsHTML += `
-            <button class="complete_run_button" onclick="completeTriangleRun()" style="background-color: var(--bg-color-light, #62a768); padding: 15px; font-weight: bold; border-radius: 8px; z-index: 1">
+            <div style="display: flex; gap: 10px; width: 90%; justify-content: center; flex-wrap: wrap;">
+                <button class="card_button" onclick="showAddItemModal()" style="background-color: #2e901a; color: white; padding: 12px; font-size: 1.1rem; border-radius: 8px; flex: 1; max-width: 200px;">➕ Add Item</button>
+                <button class="card_button" onclick="commitEditingChanges()" style="background-color: #033907; color: white; padding: 12px; font-size: 1.1rem; border-radius: 8px; flex: 1; max-width: 200px;">💾 Commit Changes</button>
+                <button class="card_button" onclick="toggleEditingMode()" style="background-color: #951d1d; color: white; padding: 12px; font-size: 1.1rem; border-radius: 8px; flex: 1; max-width: 200px;">❌ Cancel</button>
+            </div>
+        `;
+    } else if (isFetchingMode) {
+        topControlsHTML += `
+            <button class="fetching_mode_button is_fetching" id="fetching-mode-button" onclick="toggleFetchingMode()">
+                Cancel Fetching Mode
+            </button>
+            <button class="complete_run_button" onclick="completeTriangleRun()" style="background-color: var(--bg-color-light, #62a768); padding: 15px; font-weight: bold; border-radius: 8px; z-index: 1; width: 90%;">
                 🚀 Complete Triangle Run
+            </button>
+        `;
+    } else {
+        // Standard Inventory Management panel
+        topControlsHTML += `
+            <button class="clear_all_button" onclick="clearAllAmounts()">🔄 Clear All Amounts</button>
+            <button class="fetching_mode_button not_fetching" id="fetching-mode-button" onclick="toggleFetchingMode()">
+                Enter Fetching Mode
+            </button>
+            <button class="fetching_mode_button" onclick="toggleEditingMode()" style="background-color: #4a4a4a; color: white; margin-top: 5px;">
+                ✏️ Enter Editing Mode
             </button>
         `;
     }
@@ -68,39 +93,21 @@ async function loadDataForTriangleRun() {
         const typeA = (a.type || 'General').toLowerCase().trim();
         const typeB = (b.type || 'General').toLowerCase().trim();
 
-        // If the items are in the SAME category, apply our specific sorting rules
         if (typeA === typeB) {
-            // EXCEPTION: Sort 'material' items by their database ID (insertion order)
             if (typeA === 'material') {
                 return a.id - b.id; 
             }
-            
-            // STANDARD: Sort everything else alphabetically by item name
             const nameA = a.item_name || '';
             const nameB = b.item_name || '';
             return nameA.localeCompare(nameB);
         }
 
-        // If they are DIFFERENT categories, check our custom CATEGORY_ORDER array
         const indexA = CATEGORY_ORDER.indexOf(typeA);
         const indexB = CATEGORY_ORDER.indexOf(typeB);
 
-        // Case A: BOTH categories are in our custom list -> Sort by their list order
-        if (indexA !== -1 && indexB !== -1) {
-            return indexA - indexB;
-        }
-        
-        // Case B: ONLY category A is in the list -> A comes first
-        if (indexA !== -1) {
-            return -1;
-        }
-        
-        // Case C: ONLY category B is in the list -> B comes first
-        if (indexB !== -1) {
-            return 1;
-        }
-        
-        // Case D: NEITHER category is in the list -> Sort them alphabetically at the bottom
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
         return typeA.localeCompare(typeB);
     });
 
@@ -135,17 +142,18 @@ async function loadDataForTriangleRun() {
         // 5. DETERMINE WHICH BUTTONS TO SHOW BASED ON MODE
         let cardControlsHTML = '';
         
-        if (isFetchingMode) {
-            // Check if this item is currently in our memory
+        if (isEditingMode) {
+            cardControlsHTML = `
+                <button class="card_button" onclick="showEditItemModal(${item.id})" style="background-color: light-dark(#e0e0e0, #3a3a3a); margin-right: 5px;">Edit</button>
+                <button class="card_button" onclick="stageDeleteItem(${item.id})" style="background-color: #951d1d; color: white;">Delete</button>
+            `;
+        } else if (isFetchingMode) {
             const isGotten = gottenItems.has(item.id);
             const buttonText = isGotten ? "Undo" : "Mark as Gotten";
-
-            // A single button taking up the whole space
             cardControlsHTML = `
                 <button id="gotten-btn-${item.id}" class="card_button gotten_button" onclick="toggleGottenState(${item.id})">${buttonText}</button>
             `;
         } else {
-            // Standard management mode buttons 
             cardControlsHTML = `
                 <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, -1)">Decrease</button>
                 <button class="card_button" onclick="changeAmount('${TABLE_NAME}', ${item.id}, 1)">Increase</button>
