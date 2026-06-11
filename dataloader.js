@@ -1,6 +1,38 @@
 // dataLoader.js
 
-// Load database rows, sort alphabetically, and dynamically build categories/cards out of nothing
+// =========================================================================
+// CONFIGURATION
+// =========================================================================
+// Categories will appear on screen in exactly this order. 
+// Any category not on this list will be pushed to the bottom and sorted alphabetically.
+const CATEGORY_ORDER = [
+    'syrup', 
+    'sauce', 
+    'base', 
+    'inclusion', 
+    'milk', 
+    'coffee', 
+    'topping', 
+    'iced tea', 
+    'hot tea', 
+    'material', 
+    'misc'
+];
+
+// =========================================================================
+// HELPERS & LOGIC
+// =========================================================================
+
+function toTitleCase(str) {
+    if (!str) return '';
+    return str
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+// Load database rows, sort alphabetically/by category list, and dynamically build categories/cards
 async function loadDataForTriangleRun() {
     const allData = await fetchAllFromTable(TABLE_NAME); 
     
@@ -9,7 +41,7 @@ async function loadDataForTriangleRun() {
 
     // 1. Build the Top Controls conditionally based on mode
     let topControlsHTML = `
-        <div class="top_controls" style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 10px;">
+        <div class="top_controls" style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 10px; align-items: center">
             <button class="clear_all_button" onclick="clearAllAmounts()">🔄 Clear All Amounts</button>
             <button class="fetching_mode_button ${isFetchingMode ? 'is_fetching' : 'not_fetching'}" id="fetching-mode-button" onclick="toggleFetchingMode()">
                 ${isFetchingMode ? 'Cancel Fetching Mode' : 'Enter Fetching Mode'}
@@ -20,7 +52,7 @@ async function loadDataForTriangleRun() {
     const fetchingButton = document.getElementById("fetching-mode-button");
     if (isFetchingMode) {
         topControlsHTML += `
-            <button class="complete_run_button" onclick="completeTriangleRun()" style="background-color: var(--bg-color-light, #62a768); padding: 15px; font-weight: bold; border-radius: 8px;">
+            <button class="complete_run_button" onclick="completeTriangleRun()" style="background-color: var(--bg-color-light, #62a768); padding: 15px; font-weight: bold; border-radius: 8px; z-index: 1">
                 🚀 Complete Triangle Run
             </button>
         `;
@@ -31,11 +63,45 @@ async function loadDataForTriangleRun() {
 
     if (!allData || allData.length === 0) return;
 
-    // 2. SORT ALPHABETICALLY BY ITEM NAME
+    // 2. SORT AND GROUP ITEMS
     allData.sort((a, b) => {
-        const nameA = a.item_name || '';
-        const nameB = b.item_name || '';
-        return nameA.localeCompare(nameB);
+        const typeA = (a.type || 'General').toLowerCase().trim();
+        const typeB = (b.type || 'General').toLowerCase().trim();
+
+        // If the items are in the SAME category, apply our specific sorting rules
+        if (typeA === typeB) {
+            // EXCEPTION: Sort 'material' items by their database ID (insertion order)
+            if (typeA === 'material') {
+                return a.id - b.id; 
+            }
+            
+            // STANDARD: Sort everything else alphabetically by item name
+            const nameA = a.item_name || '';
+            const nameB = b.item_name || '';
+            return nameA.localeCompare(nameB);
+        }
+
+        // If they are DIFFERENT categories, check our custom CATEGORY_ORDER array
+        const indexA = CATEGORY_ORDER.indexOf(typeA);
+        const indexB = CATEGORY_ORDER.indexOf(typeB);
+
+        // Case A: BOTH categories are in our custom list -> Sort by their list order
+        if (indexA !== -1 && indexB !== -1) {
+            return indexA - indexB;
+        }
+        
+        // Case B: ONLY category A is in the list -> A comes first
+        if (indexA !== -1) {
+            return -1;
+        }
+        
+        // Case C: ONLY category B is in the list -> B comes first
+        if (indexB !== -1) {
+            return 1;
+        }
+        
+        // Case D: NEITHER category is in the list -> Sort them alphabetically at the bottom
+        return typeA.localeCompare(typeB);
     });
 
     // 3. APPLY FETCHING MODE FILTER
@@ -50,7 +116,7 @@ async function loadDataForTriangleRun() {
 
     // 4. PROCESS EACH ITEM AND GENERATE CATEGORIES DYNAMICALLY
     dataToDisplay.forEach(item => {
-        let itemType = item.type ? item.type.trim() : 'General';
+        let itemType = item.type ? toTitleCase(item.type.trim()) : 'General';
         const containerId = `category-${itemType.toLowerCase().replace(/\s+/g, '-')}`;
         
         let targetContainer = document.getElementById(containerId);
@@ -59,7 +125,7 @@ async function loadDataForTriangleRun() {
             const categorySection = document.createElement('div');
             categorySection.className = 'category_section';
             categorySection.innerHTML = `
-                <h2>${itemType}</h2>
+                <h2 class="item_type_header">${itemType}</h2>
                 <div id="${containerId}" class="category_container"></div>
             `;
             mainContentArea.appendChild(categorySection);

@@ -1,6 +1,13 @@
 :root {
     --enter-fetching-mode: #2e901a;
     --exit-fetching-mode: #951d1d;
+
+    --card-bg-light: rgba(200, 255, 200, 0.5);
+    --card-bg-dark: rgba(100, 150, 100, 0.5);
+
+    --text-color-light: #0e0e0e;
+    --text-color-dark: #f0f0f0;
+    --text-shadow-color: light-dark(transparent, rgba(0, 0, 0, 1));
 }
 
 /* --- ITEM CARD LAYOUT --- */
@@ -10,8 +17,11 @@
     align-items: center; /* Centers them vertically */
     
     /* Using your new dynamic colors! Add --bg-card to your :root if you haven't yet */
-    background-color: light-dark(#ffffff, #121214); 
-    border: 1px solid light-dark(#cccccc, #2d2d2d);
+    background-color: light-dark(var(--card-bg-light), var(--card-bg-dark)); 
+    border: none;
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px); /* Required for iPhones/Safari! */
     
     padding: 1rem 1.5rem;
     margin-bottom: 0.75rem;
@@ -29,6 +39,9 @@
     margin: 0;
     font-size: 1.25rem; 
     font-weight: bold;
+
+    color: light-dark(var(--text-color-light), var(--text-color-dark));
+    text-shadow: 0px 0px 6px var(--text-shadow-color);
 }
 
 .item_amount {
@@ -68,12 +81,38 @@
 }
 
 .fetching_mode_button {
-    font-size: 2rem;
-    padding: .5rem;
+    font-size: 1.7rem;
+    padding: .3rem;
+    width: 90%;
+    border: none;
+    border-radius: 10px;
+
+    -webkit-box-shadow: 0px 5px 10px -1px rgba(0,0,0,0.82); 
+    box-shadow: 0px 5px 10px -1px rgba(0,0,0,0.82);
+}
+.fetching_mode_button:active {
+    -webkit-box-shadow: none;
+    box-shadow: none;
 }
 .fetching_mode_button.is_fetching{
     background-color: var(--exit-fetching-mode);
 }
 .fetching_mode_button.not_fetching{
     background-color: var(--enter-fetching-mode);
+}
+
+.clear_all_button {
+    width: 90%;
+    padding: .1rem;
+    font-size: 1.2rem;
+    border-radius: 10px;
+    margin-top: 1rem;
+    border: none;
+
+    -webkit-box-shadow: 0px 5px 10px -1px rgba(0,0,0,0.82); 
+    box-shadow: 0px 5px 10px -1px rgba(0,0,0,0.82);
+}
+.clear_all_button:active {
+    -webkit-box-shadow: none;
+    box-shadow: none;
 }

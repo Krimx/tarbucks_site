@@ -108,6 +108,11 @@ function parseToParallelArrays(databaseRows, col1Name, col2Name) {
 // 3. APPLICATION UI LOGIC
 // =========================================================================
 
+function isDarkMode() {
+    // Returns true if the device is in Dark Mode, false if in Light Mode
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 // Handle the + and - buttons
 async function changeAmount(tableName, rowId, changeValue) {
     const displaySpan = document.getElementById(`display-${tableName}-${rowId}`);
@@ -263,7 +268,59 @@ function setupSearchBar() {
             suggestionsList.appendChild(li);
         }
     });
+
+    // if (isDarkMode()) {
+    //     const bgImage = document.getElementById("bgImage");
+    //     bgImage.src = "./recs/logo-dark.png"
+    // }
 }
 
 // Start up the search bar once the page loads
 document.addEventListener('DOMContentLoaded', setupSearchBar);
+
+// =========================================================================
+// 5. DEVELOPER CONSOLE TOOLS
+// =========================================================================
+
+// Can handle single items: addItem("Oat Milk", "Dairy")
+// OR bulk lists: addItem([{name: "Oat Milk", type: "Dairy"}, {name: "Splenda", type: "Sweeteners"}])
+window.addItem = async function(input, optionalType) {
+    // Case 1: User passed a bulk array of items
+    if (Array.isArray(input)) {
+        console.log(`🚀 Bulk Mode: Processing ${input.length} items sequentially...`);
+        
+        for (const item of input) {
+            if (!item.name || !item.type) {
+                console.warn("⚠️ Skipping invalid bulk item object. Must have {name, type}");
+                continue;
+            }
+            // Wait for each item to finish completely before moving to the next
+            await executeSingleAdd(item.name, item.type);
+        }
+        
+        console.log("🏁 All bulk items processed!");
+        return;
+    }
+
+    // Case 2: User passed a single item string
+    await executeSingleAdd(input, optionalType);
+};
+
+// Internal isolated logic to handle database pushes cleanly
+async function executeSingleAdd(name, type) {
+    if (!name || !type) {
+        console.error("❌ Missing info! Usage: addItem('Name', 'Category')");
+        return false;
+    }
+
+    console.log(`⏳ Sending '${name}' to database...`);
+    const success = await addRow(TABLE_NAME, { item_name: name, type: type });
+
+    if (success) {
+        console.log(`✅ Success! '${name}' added.`);
+        return true;
+    } else {
+        console.error(`❌ Failed to add '${name}'`);
+        return false;
+    }
+}
